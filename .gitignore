@@ -1,0 +1,9 @@
+*.out
+*.log
+test/
+.env
+__pycache__
+model
+log
+eva_data
+eva_log
