@@ -517,7 +517,6 @@ class TrafficSimulator:
     def collect_tripinfo(self):
         # read trip xml, has to be called externally to get complete file
         trip_file = self.output_path + ('%s_%s_trip.xml' % (self.name, self.agent))
-        print(trip_file)
         tree = ET.ElementTree(file=trip_file)
         for child in tree.getroot():
             cur_trip = child.attrib

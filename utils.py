@@ -6,7 +6,11 @@ import time
 import os
 import pandas as pd
 import subprocess
+import traci
+from sumolib import checkBinary
+import xml.etree.cElementTree as ET
 
+DEFAULT_PORT = 8000
 
 def check_dir(cur_dir):
     if not os.path.exists(cur_dir):
@@ -43,7 +47,8 @@ def init_log(log_dir):
     logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s',
                         level=logging.INFO,
                         handlers=[
-                            logging.FileHandler('%s/%d.log' % (log_dir, time.time())),
+                            logging.FileHandler('%s/%d.log' %
+                                                (log_dir, time.time())),
                             logging.StreamHandler()
                         ])
 
@@ -62,6 +67,7 @@ def init_test_flag(test_mode):
 
 def plot_train(data_dirs, labels):
     pass
+
 
 def plot_evaluation(data_dirs, labels):
     pass
@@ -128,13 +134,15 @@ class Trainer():
 
     def _init_summary(self):
         self.train_reward = tf.placeholder(tf.float32, [])
-        self.train_summary = tf.summary.scalar('train_reward', self.train_reward)
+        self.train_summary = tf.summary.scalar(
+            'train_reward', self.train_reward)
         self.test_reward = tf.placeholder(tf.float32, [])
         self.test_summary = tf.summary.scalar('test_reward', self.test_reward)
 
     def _add_summary(self, reward, global_step, is_train=True):
         if is_train:
-            summ = self.sess.run(self.train_summary, {self.train_reward: reward})
+            summ = self.sess.run(self.train_summary, {
+                                 self.train_reward: reward})
         else:
             summ = self.sess.run(self.test_summary, {self.test_reward: reward})
         self.summary_writer.add_summary(summ, global_step=global_step)
@@ -154,7 +162,8 @@ class Trainer():
                 else:
                     action = []
                     for pi in policy:
-                        action.append(np.random.choice(np.arange(len(pi)), p=pi))
+                        action.append(np.random.choice(
+                            np.arange(len(pi)), p=pi))
             else:
                 action, policy = self.model.forward(ob, mode='explore')
             next_ob, reward, done, global_reward = self.env.step(action)
@@ -208,14 +217,16 @@ class Trainer():
                     self.env.update_fingerprint(policy)
                 if self.agent == 'a2c':
                     if policy_type != 'deterministic':
-                        action = np.random.choice(np.arange(len(policy)), p=policy)
+                        action = np.random.choice(
+                            np.arange(len(policy)), p=policy)
                     else:
                         action = np.argmax(np.array(policy))
                 else:
                     action = []
                     for pi in policy:
                         if policy_type != 'deterministic':
-                            action.append(np.random.choice(np.arange(len(pi)), p=pi))
+                            action.append(np.random.choice(
+                                np.arange(len(pi)), p=pi))
                         else:
                             action.append(np.argmax(np.array(pi)))
             else:
@@ -380,9 +391,132 @@ class Evaluator(Tester):
         self.env.init_data(is_record, record_stats, self.output_path)
         time.sleep(1)
         for test_ind in range(self.test_num):
-            reward, _ = self.perform(test_ind, demo=self.demo, policy_type=self.policy_type)
+            reward, _ = self.perform(
+                test_ind, demo=self.demo, policy_type=self.policy_type)
             self.env.terminate()
             logging.info('test %i, avg reward %.2f' % (test_ind, reward))
             time.sleep(2)
             self.env.collect_tripinfo()
         self.env.output_data()
+
+
+class RREvaluator():
+    def __init__(self, output_dir, config, port):
+        self.output_dir = output_dir
+        self.episodes = config.getint('episodes')
+        self.agent = config.get('agent')
+        self.data_path = config.get('data_path')
+        self.seed = config.getint('seed')
+        self.port = port + DEFAULT_PORT
+        self.scenario = config.get('scenario')
+        self.agent = config.get('agent')
+        self.episode_length_sec = config.getint('episode_length_sec')
+        self.all_traffic_data = []
+        self.all_trip_data = []
+        self.sim = None
+        self.sumocfg_file = os.path.join(self.data_path, "{}.sumocfg".format(self.scenario))
+
+    def run(self):
+        for ep in range(self.episodes):
+            print("Running episode {}...".format(ep + 1))
+            # Run simulation and collect traffic data
+            self.run_simulation(ep)
+
+        df_traffic_results = pd.DataFrame(self.all_traffic_data)
+        df_trip_results = pd.DataFrame(self.all_trip_data)
+        df_traffic_results.to_csv(os.path.join(
+            self.output_dir, "{}_{}_traffic.csv".format(self.scenario, self.agent)), index=False)
+        df_trip_results.to_csv(os.path.join(self.output_dir, "{}_{}_trip.csv".format(
+            self.scenario, self.agent)), index=False)
+
+    def init_sim(self):
+        app = checkBinary('sumo')
+        command = [app, '-c', self.sumocfg_file]
+        command += ['--seed', str(self.seed)]
+        command += ['--remote-port', str(self.port)]
+        command += ['--time-to-teleport', '300']
+        command += ['--no-warnings', 'True']
+        command += ['--no-step-log', 'False']
+        command += ['--tripinfo-output', os.path.join(
+            self.data_path, "{}_{}_trip.xml".format(self.scenario, self.agent))]
+
+        process = subprocess.Popen(
+            command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        time.sleep(2)
+
+        try:
+            self.sim = traci.connect(port=self.port)
+
+        except traci.exceptions.FatalTraCIError:
+            print("Error: Failed to connect to SUMO. Check if it started correctly.")
+            process.terminate()
+
+    def collect_tripinfo(self, episode):
+        trip_file = os.path.join(self.data_path, "rr_trip.xml")
+        tree = ET.ElementTree(file=trip_file)
+
+        for child in tree.getroot():
+            cur_trip = child.attrib
+
+            cur_dict = {
+                'episode': episode,
+                'id': cur_trip['id'],
+                'depart_sec': cur_trip['depart'],
+                'arrival_sec': cur_trip['arrival'],
+                'duration_sec': cur_trip['duration'],
+                'wait_step': cur_trip['waitingCount'],
+                'wait_sec': cur_trip['waitingTime']
+            }
+
+            self.all_trip_data.append(cur_dict)
+
+        if os.path.exists(trip_file):
+            os.remove(trip_file)
+
+    def measure_traffic(self, cur_sec, episode):
+        cars = self.sim.vehicle.getIDList()
+        num_tot_car = len(cars)
+        num_in_car = self.sim.simulation.getDepartedNumber()
+        num_out_car = self.sim.simulation.getArrivedNumber()
+
+        if num_tot_car > 0:
+            avg_waiting_time = np.mean(
+                [self.sim.vehicle.getWaitingTime(car) for car in cars])
+            avg_speed = np.mean([self.sim.vehicle.getSpeed(car)
+                                for car in cars])
+        else:
+            avg_speed = 0
+            avg_waiting_time = 0
+
+        cur_traffic = {
+            'episode': episode,
+            'time_sec': cur_sec,
+            'number_total_car': num_tot_car,
+            'number_departed_car': num_in_car,
+            'number_arrived_car': num_out_car,
+            'avg_wait_sec': avg_waiting_time,
+            'avg_speed_mps': avg_speed,
+        }
+
+        self.all_traffic_data.append(cur_traffic)
+
+    def run_simulation(self, episode):
+        self.init_sim()
+
+        step = 0
+
+        try:
+            while step < self.episode_length_sec:
+                self.sim.simulationStep()
+                self.measure_traffic(step, episode)
+                step += 1
+
+        except Exception as e:
+            print("Simulation Error: {}".format(e))
+        finally:
+            try:
+                traci.close()
+            except Exception:
+                pass
+
+        time.sleep(2)

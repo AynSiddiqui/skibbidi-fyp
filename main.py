@@ -17,21 +17,24 @@ from envs.real_net_env import RealNetEnv, RealNetController
 from envs.test_grid_env import TestGridEnv, TestGridController
 from envs.worli_env import WorliEnv, WorliController
 from agents.models import A2C, IA2C, MA2C, IQL
-from utils import (Counter, Trainer, Tester, Evaluator,
+from utils import (Counter, Trainer, Tester, Evaluator, RREvaluator,
                    check_dir, copy_file, find_file,
                    init_dir, init_log, init_test_flag,
                    plot_evaluation, plot_train)
 
+
 def parse_args():
     default_base_dir = os.path.join(os.getcwd(), 'worli')
-    default_config_dir = os.path.join(os.getcwd(), 'config', 'config_ia2c_worli.ini')
+    default_config_dir = os.path.join(
+        os.getcwd(), 'config', 'config_ia2c_worli.ini')
     parser = argparse.ArgumentParser()
-    
+
     parser.add_argument('--base-dir', type=str, required=False,
                         default=default_base_dir, help="experiment base dir")
     subparsers = parser.add_subparsers(dest='option', help="train or evaluate")
 
-    sp = subparsers.add_parser('train', help='train a single agent under base dir')
+    sp = subparsers.add_parser(
+        'train', help='train a single agent under base dir')
 
     sp.add_argument('--test-mode', type=str, required=False,
                     default='no_test',
@@ -41,13 +44,15 @@ def parse_args():
     sp.add_argument('--config-dir', type=str, required=False,
                     default=default_config_dir, help="experiment config path")
 
-    sp = subparsers.add_parser('evaluate', help="evaluate and compare agents under base dir")
+    sp = subparsers.add_parser(
+        'evaluate', help="evaluate and compare agents under base dir")
     sp.add_argument('--agents', type=str, required=False,
                     default='naive', help="agent folder names for evaluation, split by ,")
     sp.add_argument('--evaluation-policy-type', type=str, required=False, default='default',
                     help="inference policy type in evaluation: default, stochastic, or deterministic")
     sp.add_argument('--evaluation-seeds', type=str, required=False,
-                    default=','.join([str(i) for i in range(10000, 100001, 10000)]),
+                    default=','.join([str(i)
+                                     for i in range(10000, 100001, 10000)]),
                     help="random seeds for evaluation, split by ,")
     sp.add_argument('--demo', action='store_true', help="shows SUMO gui")
     args = parser.parse_args()
@@ -149,7 +154,8 @@ def train(args):
     # disable multi-threading for safe SUMO implementation
     # threads = []
     summary_writer = tf.summary.FileWriter(dirs['log'])
-    trainer = Trainer(env, model, global_counter, summary_writer, in_test, output_path=dirs['data'])
+    trainer = Trainer(env, model, global_counter,
+                      summary_writer, in_test, output_path=dirs['data'])
     trainer.run()
     # if in_test or post_test:
     #     # assign a different port for test env
@@ -172,7 +178,8 @@ def train(args):
 
     # post-training test
     if post_test:
-        tester = Tester(env, model, global_counter, summary_writer, dirs['data'])
+        tester = Tester(env, model, global_counter,
+                        summary_writer, dirs['data'])
         tester.run_offline(dirs['data'])
 
     # save model
@@ -183,18 +190,27 @@ def train(args):
 
 def evaluate_fn(agent_dir, output_dir, seeds, port, demo, policy_type):
     agent = agent_dir.split('/')[-1]
-    if not check_dir(agent_dir):
+
+    if not check_dir(agent_dir) and agent != 'rr':
         logging.error('Evaluation: %s does not exist!' % agent)
         return
+
     # load config file for env
     config_dir = find_file(agent_dir + '/data/')
     if not config_dir:
         return
+
     config = configparser.ConfigParser()
     config.read(config_dir)
 
+    if (agent == 'rr'):
+        round_robin_evaluator = RREvaluator(output_dir, config['ENV_CONFIG'], port)
+        round_robin_evaluator.run()
+        return
+
     # init env
-    env, greedy_policy = init_env(config['ENV_CONFIG'], port=port, naive_policy=True)
+    env, greedy_policy = init_env(
+        config['ENV_CONFIG'], port=port, naive_policy=True)
     logging.info('Evaluation: s dim: %d, a dim %d, s dim ls: %r, a dim ls: %r' %
                  (env.n_s, env.n_a, env.n_s_ls, env.n_a_ls))
     env.init_test_seeds(seeds)
@@ -205,22 +221,26 @@ def evaluate_fn(agent_dir, output_dir, seeds, port, demo, policy_type):
         if agent == 'a2c':
             model = A2C(env.n_s, env.n_a, 0, config['MODEL_CONFIG'])
         elif agent == 'ia2c':
-            model = IA2C(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'])
+            model = IA2C(env.n_s_ls, env.n_a_ls, env.n_w_ls,
+                         0, config['MODEL_CONFIG'])
         elif agent == 'ma2c':
-            model = MA2C(env.n_s_ls, env.n_a_ls, env.n_w_ls, env.n_f_ls, 0, config['MODEL_CONFIG'])
+            model = MA2C(env.n_s_ls, env.n_a_ls, env.n_w_ls,
+                         env.n_f_ls, 0, config['MODEL_CONFIG'])
         elif agent == 'iqld':
             model = IQL(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'],
                         seed=0, model_type='dqn')
         else:
             model = IQL(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'],
                         seed=0, model_type='lr')
-        if not model.load(agent_dir + '/model/'):
+        if not model.load(agent_dir + '/model/') and agent != 'rr':
             return
     else:
         model = greedy_policy
+
     env.agent = agent
     # collect evaluation data
-    evaluator = Evaluator(env, model, output_dir, demo=demo, policy_type=policy_type)
+    evaluator = Evaluator(env, model, output_dir,
+                          demo=demo, policy_type=policy_type)
     evaluator.run()
 
 
@@ -232,7 +252,8 @@ def evaluate(args):
     # enforce the same evaluation seeds across agents
     seeds = args.evaluation_seeds
     policy_type = args.evaluation_policy_type
-    logging.info('Evaluation: policy type: %s, random seeds: %s' % (policy_type, seeds))
+    logging.info('Evaluation: policy type: %s, random seeds: %s' %
+                 (policy_type, seeds))
     if not seeds:
         seeds = []
     else:

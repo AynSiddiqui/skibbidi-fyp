@@ -1,4 +1,3 @@
-from small_grid.data.build_file import gen_rou_file
 from envs.env import PhaseMap, PhaseSet, TrafficSimulator
 import time
 import seaborn as sns
@@ -178,12 +177,7 @@ class WorliEnv(TrafficSimulator):
         self.secondary_ilds_map = SECONDARY_ILDS_MAP
 
     def _init_sim_config(self, seed=None):
-        script_path = os.path.join(os.getcwd(), 'worli', 'data', 'create_trip.py')
-
-        # Execute create_trip.py and wait for it to finish
-        # subprocess.call(['python', script_path])
         create_trip()
-
         return os.path.join(os.getcwd(), 'worli', 'data', 'worli.sumocfg')
 
     def plot_stat(self, rewards):
