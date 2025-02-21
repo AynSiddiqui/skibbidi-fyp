@@ -188,9 +188,7 @@ def train(args):
     model.save(dirs['model'], final_step)
 
 
-def evaluate_fn(agent_dir, output_dir, seeds, port, demo, policy_type):
-    agent = agent_dir.split('/')[-1]
-
+def evaluate_fn(agent, agent_dir, output_dir, seeds, port, demo, policy_type):
     if not check_dir(agent_dir) and agent != 'rr':
         logging.error('Evaluation: %s does not exist!' % agent)
         return
@@ -202,6 +200,8 @@ def evaluate_fn(agent_dir, output_dir, seeds, port, demo, policy_type):
 
     config = configparser.ConfigParser()
     config.read(config_dir)
+
+    print(agent)
 
     if (agent == 'rr'):
         round_robin_evaluator = RREvaluator(output_dir, config['ENV_CONFIG'], port)
@@ -262,7 +262,7 @@ def evaluate(args):
     for i, agent in enumerate(agents):
         agent_dir = os.path.join(base_dir, agent)
         thread = threading.Thread(target=evaluate_fn,
-                                  args=(agent_dir, dirs['eva_data'], seeds, i, args.demo, policy_type))
+                                  args=(agent, agent_dir, dirs['eva_data'], seeds, i, args.demo, policy_type))
         thread.start()
         threads.append(thread)
     for thread in threads:

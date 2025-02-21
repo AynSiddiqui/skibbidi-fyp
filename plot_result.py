@@ -17,16 +17,16 @@ COLORS = {'ma2c': color_cycle[0], 'ia2c': color_cycle[1], 'iqll': color_cycle[2]
 plot_dir = 'worli/plots'
 
 
-def plot_train_curve(scenario='vjti'):
-    cur_dir = 'worli/eva_data'
+def plot_train_curve(scenario='worli'):
+    cur_dir = os.path.join(scenario, 'eva_data')
     # names = ['ma2c', 'iqll']
     # labels = ['MA2C',  'IQL-LR']
 
     # names = ['ma2c', 'ia2c',  'iqll']
     # labels = ['MA2C', 'IA2C', 'IQL-LR']
 
-    names = ['ma2c', 'ia2c']
-    labels = ['MA2C', 'IA2C']
+    names = ['ma2c']
+    labels = ['MA2C']
 
     dfs = {}
     for file in os.listdir(cur_dir):
@@ -226,7 +226,7 @@ def sum_reward(x):
 
 
 def plot_eval_curve(scenario='worli'):
-    cur_dir = 'worli/eva_data'
+    cur_dir = os.path.join(scenario, 'eva_data')
     # names = ['ma2c', 'ia2c', 'iqll', 'greedy','fixed']
     # labels = ['MA2C', 'IA2C', 'IQL-LR', 'Greedy','Fixed-time']
     # names = ['ma2c', 'ia2c', 'iqll', 'greedy','fixed','ma2ceidted']
@@ -235,8 +235,8 @@ def plot_eval_curve(scenario='worli'):
 #     labels = ['IQL-DNN','Greedy']
     # names = ['base', 'greedy', 'iqll']
     # labels = ['FixedTime', 'Greedy', 'IQLL']
-    names = ['ma2c', 'ia2c', 'rr']
-    labels = ['MA2C', 'IA2C', 'Round Robin']
+    names = ['ma2c', 'rr']
+    labels = ['MA2C', 'Round Robin']
 
     dfs = {}
     for file in os.listdir(cur_dir):
@@ -247,6 +247,7 @@ def plot_eval_curve(scenario='worli'):
         name = file.split('_')[1]
         measure = file.split('_')[2].split('.')[0]
         if name in names:
+            print(os.path.join(cur_dir, file))
             df = pd.read_csv(os.path.join(cur_dir, file))
 #             if measure == 'traffic':
 #                 df['ratio_stopped_car'] = df.number_stopped_car / df.number_total_car * 100
