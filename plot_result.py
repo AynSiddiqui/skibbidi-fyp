@@ -33,7 +33,7 @@ def plot_train_curve(scenario='vjti'):
         name = file.split('_')[0]
         print(file + ', ' + name)
         if (name in names) and (name != 'greedy'):
-            df = pd.read_csv(cur_dir + '/' + file)
+            df = pd.read_csv(os.path.join(cur_dir, file))
             dfs[name] = df[df.test_id == -1]
 
     plt.figure(figsize=(9, 6))
@@ -247,7 +247,7 @@ def plot_eval_curve(scenario='worli'):
         name = file.split('_')[1]
         measure = file.split('_')[2].split('.')[0]
         if name in names:
-            df = pd.read_csv(cur_dir + '/' + file)
+            df = pd.read_csv(os.path.join(cur_dir, file))
 #             if measure == 'traffic':
 #                 df['ratio_stopped_car'] = df.number_stopped_car / df.number_total_car * 100
 #             if measure == 'control':

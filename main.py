@@ -196,7 +196,7 @@ def evaluate_fn(agent_dir, output_dir, seeds, port, demo, policy_type):
         return
 
     # load config file for env
-    config_dir = find_file(agent_dir + '/data/')
+    config_dir = find_file(os.path.join(agent_dir, 'data'))
     if not config_dir:
         return
 
@@ -232,7 +232,7 @@ def evaluate_fn(agent_dir, output_dir, seeds, port, demo, policy_type):
         else:
             model = IQL(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'],
                         seed=0, model_type='lr')
-        if not model.load(agent_dir + '/model/') and agent != 'rr':
+        if not model.load(os.path.join(agent_dir, 'model')) and agent != 'rr':
             return
     else:
         model = greedy_policy
@@ -260,7 +260,7 @@ def evaluate(args):
         seeds = [int(s) for s in seeds.split(',')]
     threads = []
     for i, agent in enumerate(agents):
-        agent_dir = base_dir + '/' + agent
+        agent_dir = os.path.join(base_dir, agent)
         thread = threading.Thread(target=evaluate_fn,
                                   args=(agent_dir, dirs['eva_data'], seeds, i, args.demo, policy_type))
         thread.start()
