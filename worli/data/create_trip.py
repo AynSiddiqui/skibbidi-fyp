@@ -11,7 +11,11 @@ import random
 import sumolib
 import heapq
 from dotenv import load_dotenv
+import time
 
+# ✅ Replace with your actual Groq API key
+GROQ_API_KEY = "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"
+GROQ_MODEL = "gemma2-9b-it"
 load_dotenv()
 
 random.seed(42)
@@ -142,6 +146,9 @@ def create_src_xml(df, output_prefix):
     return src_file
 
 def merge_dataframes(edgename_df, traffic_df, on_column):
+    xl1 = edgename_df  # Edge name data
+    xl2 = traffic_df  # Traffic data
+
     words_xl1 = edgename_df[on_column].tolist()
     words_xl2 = traffic_df[on_column].tolist()
 
@@ -156,6 +163,47 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
     processed_xl1 = [preprocess(word) for word in words_xl1]
     processed_xl2 = [preprocess(word) for word in words_xl2]
 
+    location_choices = xl1["Location"].tolist()
+
+    # 🔹 Step 4: Groq API Function
+    def get_best_match(query, choices, retries=3):
+        """Uses Groq API to match a location from xl2 to the best location in xl1 only when fuzzy match is weak."""
+        prompt = f"""
+        Match the query location to the closest valid location from the given list. Sometimes words can also be abbreviations of the matching location.
+        and return the best matching location name exactly as given in choices and nothing else..i dont want your thinking process to be included in the output.
+        Query: "{query}"
+        Choices: {', '.join(choices)}
+        
+        
+        """
+
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": GROQ_MODEL,
+            "messages": [{"role": "user", "content": prompt}]
+        }
+
+        for attempt in range(retries):
+            response = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, data=json.dumps(data))
+
+            if response.status_code == 200:
+                result = response.json()
+                print(result["choices"][0]["message"]["content"])
+                return result["choices"][0]["message"]["content"].strip()
+            
+            elif response.status_code == 429:  # Rate limit error
+                print(f"⏳ Rate limit reached. Retrying in 5 seconds... (Attempt {attempt + 1})")
+                time.sleep(5)  # Wait and retry
+            
+            else:
+                print("🚨 Error:", response.text)
+                return None
+
+    # Step 5: Hybrid Matching
     # Split traffic data words by '/'
     split_processed_xl2 = []
     split_original_xl2 = []
@@ -170,29 +218,42 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
     threshold = 80  # Matching threshold
 
     for original_word, processed_word in zip(split_original_xl2, split_processed_xl2):
-        top_match = process.extractOne(processed_word, processed_xl1)
-        
-        if top_match and top_match[1] >= threshold:
-            match_name = words_xl1[processed_xl1.index(top_match[0])]
-            edge_id = edgename_df.loc[edgename_df[on_column] == match_name, 'Edge_IDs'].values[0]
+        top_match, match_score = process.extractOne(processed_word, processed_xl1) if processed_xl1 else (None, 0)
+
+        if match_score >= threshold:
+            # ✅ Strong fuzzy match found
+            match_name = words_xl1[processed_xl1.index(top_match)]
+            method = "Fuzzy Matching"
         else:
-            match_name = "No strong match"
-            edge_id = ""
+            # 🚀 Fuzzy match weak, use LLM
+            match_name = get_best_match(original_word, location_choices)
+            method = "Groq API"
         
-        # Get jam factor and num vehicles
-        row_data = traffic_df[traffic_df['Location'] == original_word]
+        # ✅ Fetch Edge ID (Ensure match exists in xl1 before lookup)
+        matched_row = xl1[xl1["Location"] == match_name]
+        edge_id = matched_row["Edge_IDs"].values[0] if not matched_row.empty else ""
+
+        # ✅ Get Jam Factor and Num Vehicles (Ensure match exists in xl2 before lookup)
+        row_data = xl2[xl2["Location"] == original_word]
         jam_factor = row_data['Jam Factor'].values[0] if not row_data.empty else ""
         num_vehicles = row_data['Num_Vehicles'].values[0] if not row_data.empty else ""
-        
-        if edge_id:
-            results.append({
-                'Query_Word': original_word,
-                'Location': match_name,
-                'Edge_IDs': edge_id,
-                'Jam Factor': jam_factor,
-                'Num_Vehicles': num_vehicles
-            })
 
+        # # ✅ Handle case where LLM returns None
+        # if match_name is None or match_name not in words_xl1:
+        #     match_name = "No strong match"
+        #     method = "None"
+        #     edge_id = ""
+
+        results.append({
+            'Query Word': original_word,
+            'Match': match_name,
+            'Edge Ids': edge_id,
+            'Jam Factor': jam_factor,
+            'Num Vehicles': num_vehicles,
+            'Method': method
+        })
+
+    # 🔹 Step 6: Save Results
     fuzzy_results_df = pd.DataFrame(results)
 
     return fuzzy_results_df
