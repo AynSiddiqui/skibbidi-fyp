@@ -12,9 +12,10 @@ import sumolib
 import heapq
 from dotenv import load_dotenv
 import time
+import numpy as np
 
 # ✅ Replace with your actual Groq API key
-GROQ_API_KEY = "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"
+GROQ_API_KEY = ##
 GROQ_MODEL = "gemma2-9b-it"
 load_dotenv()
 
@@ -168,20 +169,19 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
     # 🔹 Step 4: Groq API Function
     def get_best_match(query, choices, retries=3):
         """Uses Groq API to match a location from xl2 to the best location in xl1 only when fuzzy match is weak."""
-        prompt = f"""
+        prompt = """
         Match the query location to the closest valid location from the given list. Sometimes words can also be abbreviations of the matching location.
         and return the best matching location name exactly as given in choices and nothing else..i dont want your thinking process to be included in the output.
-        Query: "{query}"
-        Choices: {', '.join(choices)}
-        
-        
-        """
+        Query: "{0}"
+        Choices: {1}
+        """.format(query, ', '.join(choices))
+
 
         headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Authorization": "Bearer {}".format(GROQ_API_KEY),
             "Content-Type": "application/json"
         }
-        
+            
         data = {
             "model": GROQ_MODEL,
             "messages": [{"role": "user", "content": prompt}]
@@ -192,15 +192,15 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
 
             if response.status_code == 200:
                 result = response.json()
-                print(result["choices"][0]["message"]["content"])
+                #print(result["choices"][0]["message"]["content"])
                 return result["choices"][0]["message"]["content"].strip()
             
             elif response.status_code == 429:  # Rate limit error
-                print(f"⏳ Rate limit reached. Retrying in 5 seconds... (Attempt {attempt + 1})")
+                #print("Rate limit reached. Retrying in 5 seconds... (Attempt {})".format(attempt + 1))
                 time.sleep(5)  # Wait and retry
             
             else:
-                print("🚨 Error:", response.text)
+                #print("🚨 Error:", response.text)
                 return None
 
     # Step 5: Hybrid Matching
@@ -245,11 +245,11 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
         #     edge_id = ""
 
         results.append({
-            'Query Word': original_word,
-            'Match': match_name,
-            'Edge Ids': edge_id,
+            'Query_Word': original_word,
+            'Location': match_name,
+            'Edge_IDs': edge_id,
             'Jam Factor': jam_factor,
-            'Num Vehicles': num_vehicles,
+            'Num_Vehicles': num_vehicles,
             'Method': method
         })
 
@@ -258,31 +258,29 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
 
     return fuzzy_results_df
 
+
 def generate_routes(df):
     net = sumolib.net.readNet(NET_FILE)
-    edges = list(net.getEdges())
-    all_edges = [edge.getID() for edge in edges]
-    num_edges = df.shape[0]
-    inc = 1
-
     routes = []
     
     for index, row in df.iterrows():
         edge_id = row["Edge_ID"]
-        num_vehicles = int(row["Edge_Weight"])
-
+        edge_weight = row["Edge_Weight"]
+        
+        # Skip rows with infinite edge weight
+        if np.isinf(edge_weight):
+            continue
+        
+        num_vehicles = int(edge_weight)
         valid_routes = get_valid_routes(net, edge_id)
 
         if not valid_routes:
-            inc += 1
             continue
         
         for i in range(num_vehicles):
             selected_route = random.choice(valid_routes)
             routes.append((i, edge_id, selected_route))
-        
-        inc += 1
-
+    
     with open(ROU_FILE, "w") as f:
         f.write("<routes>\n")
         f.write('   <vType id="car" accel="2.6" decel="4.5" sigma="0.5" length="5.0" maxSpeed="80"/>\n')

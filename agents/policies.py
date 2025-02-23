@@ -442,17 +442,18 @@ class QPolicy:
             summaries.append(tf.summary.scalar('train/%s_tq' % self.name, tf.reduce_mean(tq)))
             summaries.append(tf.summary.scalar('train/%s_gradnorm' % self.name, self.grad_norm))
             self.summary = tf.summary.merge(summaries)
-
-
 class DeepQPolicy(QPolicy):
     def __init__(self, n_s, n_a, n_w, n_step, n_fc0=128, n_fc=64, name=None):
         super().__init__(n_a, n_s, n_step, 'dqn', name)
         self.n_fc = n_fc
         self.n_fc0 = n_fc0
         self.n_w = n_w
-        self.S = tf.placeholder(tf.float32, [None, n_s + n_w])
+        # Input placeholder: note that state dimension = n_s + n_w
+        self.S = tf.placeholder(tf.float32, [None, n_s + n_w], name="S")
         with tf.variable_scope(self.name + '_q'):
             self.qvalues = self._build_net(self.S)
+        # Initially set summary to a dummy op; it will be replaced after prepare_loss() is called.
+        self.summary = tf.summary.scalar("dummy", tf.constant(0.0))
 
     def _build_net(self, S):
         if self.n_w == 0:
@@ -461,10 +462,42 @@ class DeepQPolicy(QPolicy):
             h0 = fc(S[:, :self.n_s], 'q_fcw', self.n_fc0)
             h1 = fc(S[:, self.n_s:], 'q_fct', self.n_fc0 / 4)
             h = tf.concat([h0, h1], 1)
+        # Build a fully connected net with one hidden layer defined by n_fc.
         return self._build_fc_net(h, [self.n_fc])
 
     def forward(self, sess, ob):
         return sess.run(self.qvalues, {self.S: np.array([ob])})
+
+    def prepare_loss(self, max_grad_norm, gamma):
+        # Define placeholders for training targets
+        self.A = tf.placeholder(tf.int32, [self.n_step], name="A")
+        self.S1 = tf.placeholder(tf.float32, [self.n_step, self.n_s + self.n_w], name="S1")
+        self.R = tf.placeholder(tf.float32, [self.n_step], name="R")
+        self.DONE = tf.placeholder(tf.bool, [self.n_step], name="DONE")
+        A_sparse = tf.one_hot(self.A, self.n_a)
+        # Get Q-value for chosen actions
+        q0 = tf.reduce_sum(self.qvalues * A_sparse, axis=1)
+        # Compute target Q: use a target network in a full implementation.
+        with tf.variable_scope(self.name + '_q', reuse=True):
+            q1s = self._build_net(self.S1)
+        q1 = tf.reduce_max(q1s, axis=1)
+        # Compute target: if DONE is true, use reward; otherwise add discounted max next Q.
+        tq = tf.stop_gradient(tf.where(self.DONE, self.R, self.R + gamma * q1))
+        self.loss = tf.reduce_mean(tf.square(q0 - tq))
+        wts = tf.trainable_variables(scope=self.name)
+        grads = tf.gradients(self.loss, wts)
+        if max_grad_norm > 0:
+            grads, self.grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+        self.lr = tf.placeholder(tf.float32, [], name="lr")
+        self.optimizer = tf.train.AdamOptimizer(learning_rate=self.lr)
+        self._train = self.optimizer.apply_gradients(list(zip(grads, wts)))
+        # Create summaries for monitoring training
+        summaries = []
+        summaries.append(tf.summary.scalar('train/{}_loss'.format(self.name), self.loss))
+        summaries.append(tf.summary.scalar('train/{}_q'.format(self.name), tf.reduce_mean(q0)))
+        summaries.append(tf.summary.scalar('train/{}_tq'.format(self.name), tf.reduce_mean(tq)))
+        summaries.append(tf.summary.scalar('train/{}_gradnorm'.format(self.name), self.grad_norm))
+        self.summary = tf.summary.merge(summaries)
 
     def backward(self, sess, obs, acts, next_obs, dones, rs, cur_lr,
                  summary_writer=None, global_step=None):
@@ -481,6 +514,7 @@ class DeepQPolicy(QPolicy):
                          self.lr: cur_lr})
         if summary_writer is not None:
             summary_writer.add_summary(outs[0], global_step=global_step)
+
 
 
 class LRQPolicy(DeepQPolicy):
