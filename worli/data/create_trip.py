@@ -15,7 +15,7 @@ import time
 import numpy as np
 
 # ✅ Replace with your actual Groq API key
-GROQ_API_KEY = "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"
+GROQ_API_KEY = ""
 GROQ_MODEL = "gemma2-9b-it"
 load_dotenv()
 
