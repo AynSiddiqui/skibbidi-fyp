@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 import time
 
 # ✅ Replace with your actual Groq API key
-GROQ_API_KEY = "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"
+GROQ_API_KEY = ###
 GROQ_MODEL = "gemma2-9b-it"
 load_dotenv()
 
@@ -168,20 +168,19 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
     # 🔹 Step 4: Groq API Function
     def get_best_match(query, choices, retries=3):
         """Uses Groq API to match a location from xl2 to the best location in xl1 only when fuzzy match is weak."""
-        prompt = f"""
+        prompt = """
         Match the query location to the closest valid location from the given list. Sometimes words can also be abbreviations of the matching location.
         and return the best matching location name exactly as given in choices and nothing else..i dont want your thinking process to be included in the output.
-        Query: "{query}"
-        Choices: {', '.join(choices)}
-        
-        
-        """
+        Query: "{0}"
+        Choices: {1}
+        """.format(query, ', '.join(choices))
+
 
         headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Authorization": "Bearer {}".format(GROQ_API_KEY),
             "Content-Type": "application/json"
         }
-        
+            
         data = {
             "model": GROQ_MODEL,
             "messages": [{"role": "user", "content": prompt}]
@@ -196,7 +195,7 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
                 return result["choices"][0]["message"]["content"].strip()
             
             elif response.status_code == 429:  # Rate limit error
-                print(f"⏳ Rate limit reached. Retrying in 5 seconds... (Attempt {attempt + 1})")
+                print("Rate limit reached. Retrying in 5 seconds... (Attempt {})".format(attempt + 1))
                 time.sleep(5)  # Wait and retry
             
             else:
@@ -245,11 +244,11 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
         #     edge_id = ""
 
         results.append({
-            'Query Word': original_word,
-            'Match': match_name,
-            'Edge Ids': edge_id,
+            'Query_Word': original_word,
+            'Location': match_name,
+            'Edge_IDs': edge_id,
             'Jam Factor': jam_factor,
-            'Num Vehicles': num_vehicles,
+            'Num_Vehicles': num_vehicles,
             'Method': method
         })
 
