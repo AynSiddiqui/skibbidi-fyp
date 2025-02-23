@@ -248,11 +248,7 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
             'Query_Word': original_word,
             'Location': match_name,
             'Edge_IDs': edge_id,
-            'Query_Word': original_word,
-            'Location': match_name,
-            'Edge_IDs': edge_id,
             'Jam Factor': jam_factor,
-            'Num_Vehicles': num_vehicles,
             'Num_Vehicles': num_vehicles,
             'Method': method
         })
