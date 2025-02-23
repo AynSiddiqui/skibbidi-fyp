@@ -177,7 +177,9 @@ class WorliEnv(TrafficSimulator):
         self.secondary_ilds_map = SECONDARY_ILDS_MAP
 
     def _init_sim_config(self, seed=None):
-        create_trip()
+        if self.cur_episode == 0:
+            create_trip()
+
         return os.path.join(os.getcwd(), 'worli', 'data', 'worli.sumocfg')
 
     def plot_stat(self, rewards):

@@ -14,10 +14,10 @@ from dotenv import load_dotenv
 import time
 import numpy as np
 
-# ✅ Replace with your actual Groq API key
+load_dotenv()
+
 GROQ_API_KEY = ""
 GROQ_MODEL = "gemma2-9b-it"
-load_dotenv()
 
 random.seed(42)
 # CONSTANTS TO EDIT
@@ -30,7 +30,6 @@ BBOX_NORTH = 19.0066500  # maxlat
 BBOX_SOUTH = 18.9970400  # minlat
 BBOX_EAST = 72.8230300   # maxlon
 BBOX_WEST = 72.8123800   # minlon
-
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))  
 
