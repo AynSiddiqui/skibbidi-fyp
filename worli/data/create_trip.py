@@ -15,7 +15,7 @@ import time
 import numpy as np
 
 # ✅ Replace with your actual Groq API key
-GROQ_API_KEY = ##
+GROQ_API_KEY = "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"
 GROQ_MODEL = "gemma2-9b-it"
 load_dotenv()
 
@@ -248,7 +248,11 @@ def merge_dataframes(edgename_df, traffic_df, on_column):
             'Query_Word': original_word,
             'Location': match_name,
             'Edge_IDs': edge_id,
+            'Query_Word': original_word,
+            'Location': match_name,
+            'Edge_IDs': edge_id,
             'Jam Factor': jam_factor,
+            'Num_Vehicles': num_vehicles,
             'Num_Vehicles': num_vehicles,
             'Method': method
         })
