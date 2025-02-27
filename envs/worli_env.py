@@ -188,7 +188,7 @@ class WorliEnv(TrafficSimulator):
             fig = plt.figure(figsize=(8, 6))
             plot_cdf(data)
             plt.ylabel(name)
-            fig.savefig(self.output_path + self.name + '_' + name + '.png')
+            fig.savefig(os.path.join(self.output_path, self.name + '_' + name + '.png'))
 
 
 def plot_cdf(X, c='b', label=None):

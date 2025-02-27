@@ -299,7 +299,7 @@ class TrafficSimulator:
         # collect trip info if necessary
         if self.is_record:
             command += ['--tripinfo-output',
-                        self.output_path + ('%s_%s_trip.xml' % (self.name, self.agent))]
+                        os.path.join(self.output_path, ('%s_%s_trip.xml' % (self.name, self.agent)))]
         subprocess.Popen(command)
         # wait 2s to establish the traci server
         time.sleep(2)
@@ -516,7 +516,7 @@ class TrafficSimulator:
 
     def collect_tripinfo(self):
         # read trip xml, has to be called externally to get complete file
-        trip_file = self.output_path + ('%s_%s_trip.xml' % (self.name, self.agent))
+        trip_file = os.path.join(self.output_path, ('%s_%s_trip.xml' % (self.name, self.agent)))
         tree = ET.ElementTree(file=trip_file)
         for child in tree.getroot():
             cur_trip = child.attrib
@@ -555,11 +555,12 @@ class TrafficSimulator:
         if not self.is_record:
             logging.error('Env: no record to output!')
         control_data = pd.DataFrame(self.control_data)
-        control_data.to_csv(self.output_path + ('%s_%s_control.csv' % (self.name, self.agent)))
+
+        control_data.to_csv(os.path.join(self.output_path, ('%s_%s_control.csv' % (self.name, self.agent))))
         traffic_data = pd.DataFrame(self.traffic_data)
-        traffic_data.to_csv(self.output_path + ('%s_%s_traffic.csv' % (self.name, self.agent)))
+        traffic_data.to_csv(os.path.join(self.output_path, ('%s_%s_traffic.csv' % (self.name, self.agent))))
         trip_data = pd.DataFrame(self.trip_data)
-        trip_data.to_csv(self.output_path + ('%s_%s_trip.csv' % (self.name, self.agent)))
+        trip_data.to_csv(os.path.join(self.output_path, ('%s_%s_trip.csv' % (self.name, self.agent))))
 
     def reset(self, gui=False, test_ind=0):
         # have to terminate previous sim before calling reset

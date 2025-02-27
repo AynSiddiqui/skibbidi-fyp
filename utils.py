@@ -9,9 +9,10 @@ import subprocess
 import traci
 from sumolib import checkBinary
 import xml.etree.cElementTree as ET
-import shutil 
+import shutil
 
 DEFAULT_PORT = 8000
+
 
 def check_dir(cur_dir):
     if not os.path.exists(cur_dir):
@@ -318,7 +319,7 @@ class Trainer():
             self._add_summary(mean_reward, global_step)
             self.summary_writer.flush()
         df = pd.DataFrame(self.data)
-        df.to_csv(self.output_path + 'train_reward.csv')
+        df.to_csv(os.path.join(self.output_path, 'train_reward.csv'))
 
 
 class Tester(Trainer):
@@ -372,7 +373,7 @@ class Tester(Trainer):
                              (global_step, avg_reward))
                 # self.global_counter.update_test(avg_reward)
         df = pd.DataFrame(self.data)
-        df.to_csv(self.output_path + 'train_reward.csv')
+        df.to_csv(os.path.join(self.output_path, 'train_reward.csv'))
 
 
 class Evaluator(Tester):
@@ -416,7 +417,8 @@ class RREvaluator():
         self.all_traffic_data = []
         self.all_trip_data = []
         self.sim = None
-        self.sumocfg_file = os.path.join(self.data_path, "{}.sumocfg".format(self.scenario))
+        self.sumocfg_file = os.path.join(
+            self.data_path, "{}.sumocfg".format(self.scenario))
 
     def run(self):
         for ep in range(self.episodes):
@@ -438,7 +440,7 @@ class RREvaluator():
         command += ['--remote-port', str(self.port)]
         command += ['--time-to-teleport', '300']
         command += ['--no-warnings', 'True']
-        command += ['--no-step-log', 'False']
+        command += ['--no-step-log', 'True']
         command += ['--tripinfo-output', os.path.join(
             self.data_path, "{}_{}_trip.xml".format(self.scenario, self.agent))]
 
@@ -448,13 +450,17 @@ class RREvaluator():
 
         try:
             self.sim = traci.connect(port=self.port)
+            return process
 
-        except traci.exceptions.FatalTraCIError:
+        except:
             print("Error: Failed to connect to SUMO. Check if it started correctly.")
             process.terminate()
+            return None
 
     def collect_tripinfo(self, episode):
-        trip_file = os.path.join(self.data_path, "rr_trip.xml")
+        trip_file = os.path.join(
+            self.data_path, "{}_{}_trip.xml".format(self.scenario, self.agent))
+
         tree = ET.ElementTree(file=trip_file)
 
         for child in tree.getroot():
@@ -472,8 +478,8 @@ class RREvaluator():
 
             self.all_trip_data.append(cur_dict)
 
-        if os.path.exists(trip_file):
-            os.remove(trip_file)
+        # if os.path.exists(trip_file):
+        #     os.remove(trip_file)
 
     def measure_traffic(self, cur_sec, episode):
         cars = self.sim.vehicle.getIDList()
@@ -503,7 +509,11 @@ class RREvaluator():
         self.all_traffic_data.append(cur_traffic)
 
     def run_simulation(self, episode):
-        self.init_sim()
+        process = self.init_sim()
+
+        if (self.sim is None):
+            print("Failed to start SUMO")
+            return
 
         step = 0
 
@@ -515,10 +525,14 @@ class RREvaluator():
 
         except Exception as e:
             print("Simulation Error: {}".format(e))
-        finally:
-            try:
-                traci.close()
-            except Exception:
-                pass
 
-        time.sleep(2)
+        try:
+            if self.sim is not None:
+                self.sim.close()
+
+        except:
+            print("Failed to close SUMO connection")
+
+        process.wait()
+
+        self.collect_tripinfo(episode)

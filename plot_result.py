@@ -11,22 +11,19 @@ sns.set_color_codes()
 
 window = 50
 TRAIN_STEP = 1e5
+
 color_cycle = sns.color_palette()
-COLORS = {'ma2c': color_cycle[0], 'ia2c': color_cycle[1], 'iqll': color_cycle[2],
-          'rr': color_cycle[3], 'greedy': color_cycle[4], 'ma2ceidted': color_cycle[5]}
+COLORS = {'ma2c': color_cycle[0], 'ia2c': color_cycle[1],
+          'dqn': color_cycle[2], 'rr': color_cycle[3]}
+
 plot_dir = 'worli/plots'
 
 
 def plot_train_curve(scenario='worli'):
     cur_dir = os.path.join(scenario, 'eva_data')
-    # names = ['ma2c', 'iqll']
-    # labels = ['MA2C',  'IQL-LR']
 
-    # names = ['ma2c', 'ia2c',  'iqll']
-    # labels = ['MA2C', 'IA2C', 'IQL-LR']
-
-    names = ['ma2c']
-    labels = ['MA2C']
+    names = ['ia2c', 'ma2c', 'dqn']
+    labels = ['IA2C', 'MA2C', 'DQN']
 
     dfs = {}
     for file in os.listdir(cur_dir):
@@ -56,26 +53,28 @@ def plot_train_curve(scenario='worli'):
             ymax.append(np.nanmax(x_mean + 0.5 * x_std))
             plt.fill_between(df.step.values, x_mean - x_std, x_mean +
                              x_std, facecolor=COLORS[name], edgecolor='none', alpha=0.1)
+
     ymin = min(ymin)
     ymax = max(ymax)
+
     plt.xlim([0, TRAIN_STEP])
-    if scenario == 'large_grid':
-        plt.ylim([-1600, -400])
-    else:
-        plt.ylim([-1000, 0])
+    plt.ylim([-1000, 0])
 
     def millions(x, pos):
         return '%1.1fM' % (x*1e-6)
 
     formatter = FuncFormatter(millions)
     plt.gca().xaxis.set_major_formatter(formatter)
+
     plt.xticks(fontsize=15)
     plt.yticks(fontsize=15)
+
     plt.xlabel('Training step', fontsize=18)
     plt.ylabel('Average episode reward', fontsize=18)
     plt.legend(loc='lower left', fontsize=13)
     plt.tight_layout()
-    plt.savefig(plot_dir + ('/%s_train.pdf' % scenario))
+
+    plt.savefig(os.path.join(plot_dir, ('{}_train.pdf'.format(scenario))))
     plt.close()
 
 
@@ -125,8 +124,7 @@ def plot_series(df, name, tab, label, color, window=None, agg='sum', reward=Fals
     episodes = list(df.episode.unique())
     num_episode = len(episodes)
     num_time = episode_sec
-    print(label, name)
-    # always use avg over episodes
+
     if tab != 'trip':
         res = df.loc[df.episode == episodes[0], name].values
         for episode in episodes[1:]:
@@ -162,7 +160,7 @@ def plot_series(df, name, tab, label, color, window=None, agg='sum', reward=Fals
                     cur_x, df[df.episode == episode].arrival_sec.values, window, agg)
             else:
                 cur_x = fixed_agg(cur_x, window, agg)
-#         print(cur_x.shape)
+
         x[i] = cur_x
     if num_episode > 1:
         x_mean = np.mean(x, axis=0)
@@ -176,8 +174,7 @@ def plot_series(df, name, tab, label, color, window=None, agg='sum', reward=Fals
             t = np.arange(5, episode_sec + 1, 5)
     else:
         t = np.arange(window, episode_sec + 1, window)
-#     if reward:
-#         print('%s: %.2f' % (label, np.mean(x_mean)))
+
     plt.plot(t, x_mean, color=color, linewidth=3, label=label)
     if num_episode > 1:
         x_lo = x_mean - x_std
@@ -196,27 +193,30 @@ def plot_combined_series(dfs, agent_names, col_name, tab_name, agent_labels, y_l
     ymin = np.inf
     ymax = -np.inf
     for i, aname in enumerate(agent_names):
-        print(aname, tab_name)
+        if(aname == 'rr' and (col_name == 'reward' or col_name == 'avg_queue')):
+            continue
         df = dfs[aname][tab_name]
-        y0, y1 = plot_series(
-            df, col_name, tab_name, agent_labels[i], COLORS[aname], window=window, agg=agg, reward=reward)
+        y0, y1 = plot_series(df, col_name, tab_name, agent_labels[i], COLORS[aname], window=window, agg=agg, reward=reward)
         ymin = min(ymin, y0)
         ymax = max(ymax, y1)
 
     plt.xlim([0, episode_sec])
+
     if (col_name == 'average_speed') and ('global' in agent_names):
         plt.ylim([0, 6])
+
     elif (col_name == 'wait_sec') and ('global' not in agent_names):
         plt.ylim([0, 3500])
     else:
         plt.ylim([ymin, ymax])
+
     plt.xticks(fontsize=15)
     plt.yticks(fontsize=15)
     plt.xlabel('Simulation time (sec)', fontsize=18)
     plt.ylabel(y_label, fontsize=18)
     plt.legend(loc='upper left', fontsize=13)
     plt.tight_layout()
-    plt.savefig(plot_dir + ('/%s.pdf' % fig_name))
+    plt.savefig(os.path.join(plot_dir, '{}.pdf'.format(fig_name)))
     plt.close()
 
 
@@ -227,16 +227,9 @@ def sum_reward(x):
 
 def plot_eval_curve(scenario='worli'):
     cur_dir = os.path.join(scenario, 'eva_data')
-    # names = ['ma2c', 'ia2c', 'iqll', 'greedy','fixed']
-    # labels = ['MA2C', 'IA2C', 'IQL-LR', 'Greedy','Fixed-time']
-    # names = ['ma2c', 'ia2c', 'iqll', 'greedy','fixed','ma2ceidted']
-    # labels = ['MA2C', 'IA2C', 'IQL-LR', 'Greedy','Fixed-time','MA2C with minimum interval']
-#     names = ['iqld', 'greedy']
-#     labels = ['IQL-DNN','Greedy']
-    # names = ['base', 'greedy', 'iqll']
-    # labels = ['FixedTime', 'Greedy', 'IQLL']
-    names = ['ma2c', 'rr']
-    labels = ['MA2C', 'Round Robin']
+
+    names = ['ia2c', 'ma2c', 'dqn', 'rr']
+    labels = ['IA2C', 'MA2C', 'DQN', 'RR']
 
     dfs = {}
     for file in os.listdir(cur_dir):
@@ -249,10 +242,7 @@ def plot_eval_curve(scenario='worli'):
         if name in names:
             print(os.path.join(cur_dir, file))
             df = pd.read_csv(os.path.join(cur_dir, file))
-#             if measure == 'traffic':
-#                 df['ratio_stopped_car'] = df.number_stopped_car / df.number_total_car * 100
-#             if measure == 'control':
-#                 df['global_reward'] = df.reward.apply(sum_reward)
+
             if name not in dfs:
                 dfs[name] = {}
             dfs[name][measure] = df
@@ -270,8 +260,8 @@ def plot_eval_curve(scenario='worli'):
     plot_combined_series(dfs, names, 'number_arrived_car', 'traffic', labels,
                          'Trip completion rate (veh/5min)', scenario + '_tripcomp', window=300, agg='sum')
     # plot trip time
-#     plot_combined_series(dfs, names, 'duration_sec', 'trip', labels,
-#                          'Avg trip time (sec)', scenario + '_triptime', window=60, agg='mean')
+    plot_combined_series(dfs, names, 'duration_sec', 'trip', labels,
+                         'Avg trip time (sec)', scenario + '_triptime', window=60, agg='mean')
 #     plot trip waiting time
     plot_combined_series(dfs, names, 'wait_sec', 'trip', labels,
                          'Avg trip delay (s)', scenario + '_tripwait', window=60, agg='mean')

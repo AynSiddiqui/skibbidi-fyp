@@ -83,7 +83,7 @@ class A2C:
         self.trans_buffer = OnPolicyBuffer(gamma)
 
     def save(self, model_dir, global_step):
-        self.saver.save(self.sess, model_dir + 'checkpoint', global_step=global_step)
+        self.saver.save(self.sess, os.path.join(model_dir, 'checkpoint'), global_step=global_step)
 
     def load(self, model_dir, checkpoint=None):
         save_file = None
@@ -103,7 +103,7 @@ class A2C:
             else:
                 save_file = 'checkpoint-' + str(int(checkpoint))
         if save_file is not None:
-            self.saver.restore(self.sess, model_dir + save_file)
+            self.saver.restore(self.sess, os.path.join(model_dir, save_file))
             logging.info('Checkpoint loaded: %s' % save_file)
             return True
         logging.error('Can not find old checkpoint for %s' % model_dir)
