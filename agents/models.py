@@ -10,7 +10,7 @@ import logging
 import multiprocessing as mp
 import numpy as np
 import tensorflow as tf
-
+from agents.policies import COMAPolicy
 
 class A2C:
     def __init__(self, n_s, n_a, total_step, model_config, seed=0, n_f=None):
@@ -494,6 +494,111 @@ class DQN:
             rewards /= self.reward_norm
         if self.reward_clip:
             rewards = np.clip(rewards, -self.reward_clip, self.reward_clip)
+        for i in range(self.n_agent):
+            self.trans_buffer_ls[i].add_transition(obs[i], actions[i], rewards[i], next_obs[i], done)
+    
+    def save(self, model_dir, global_step):
+        self.saver.save(self.sess, os.path.join(model_dir, 'checkpoint'), global_step=global_step)
+    
+    def load(self, model_dir, checkpoint=None):
+        save_file = None
+        save_step = 0
+        if os.path.exists(model_dir):
+            if checkpoint is None:
+                for file in os.listdir(model_dir):
+                    if file.startswith('checkpoint'):
+                        prefix = file.split('.')[0]
+                        tokens = prefix.split('-')
+                        if len(tokens) != 2:
+                            continue
+                        cur_step = int(tokens[1])
+                        if cur_step > save_step:
+                            save_file = prefix
+                            save_step = cur_step
+            else:
+                save_file = 'checkpoint-{}'.format(int(checkpoint))
+        if save_file:
+            self.saver.restore(self.sess, os.path.join(model_dir, save_file))
+            logging.info('Checkpoint loaded: {}'.format(save_file))
+            return True
+        logging.error('Cannot find old checkpoint for {}'.format(model_dir))
+        return False
+
+class COMA:
+    def __init__(self, n_s_ls, n_a_ls, n_w_ls, total_step, model_config, seed=0):
+        self.name = 'coma'
+        self.n_agent = len(n_s_ls)
+        self.n_s_ls = n_s_ls
+        self.n_a_ls = n_a_ls
+        self.n_w_ls = n_w_ls
+        self.n_step = model_config.getint('batch_size')
+        
+        tf.reset_default_graph()
+        tf.set_random_seed(seed)
+        config = tf.ConfigProto(allow_soft_placement=True)
+        self.sess = tf.Session(config=config)
+        
+        # Create one COMAPolicy per agent.
+        self.policy_ls = []
+        for i, (n_s, n_a, n_w) in enumerate(zip(self.n_s_ls, self.n_a_ls, self.n_w_ls)):
+            self.policy_ls.append(COMAPolicy(n_s, n_a, n_w, self.n_step, model_config, name="coma_{}".format(i)))
+        
+        self.saver = tf.train.Saver(max_to_keep=5)
+        if total_step:
+            self.total_step = total_step
+            self._init_scheduler(model_config)
+            self._init_train(model_config)
+        self.sess.run(tf.global_variables_initializer())
+    
+    def _init_scheduler(self, model_config):
+        lr_init = model_config.getfloat('lr_init')
+        lr_decay = model_config.get('lr_decay')
+        if lr_decay == 'constant':
+            self.lr_scheduler = Scheduler(lr_init, decay=lr_decay)
+        else:
+            lr_min = model_config.getfloat('lr_min')
+            self.lr_scheduler = Scheduler(lr_init, lr_min, self.total_step, decay=lr_decay)
+    
+    def _init_train(self, model_config):
+        max_grad_norm = model_config.getfloat('max_grad_norm')
+        gamma = model_config.getfloat('gamma')
+        buffer_size = model_config.get('buffer_size')
+        try:
+            buffer_size = float(buffer_size)
+        except Exception:
+            buffer_size = 1000.0
+        self.trans_buffer_ls = []
+        for i in range(self.n_agent):
+            self.policy_ls[i].prepare_loss(max_grad_norm, gamma)
+            self.trans_buffer_ls.append(ReplayBuffer(buffer_size, self.n_step))
+    
+    def backward(self, summary_writer=None, global_step=None):
+        cur_lr = self.lr_scheduler.get(self.n_step)
+        if self.trans_buffer_ls[0].size < self.trans_buffer_ls[0].batch_size:
+            return
+        for i in range(self.n_agent):
+            for k in range(10):
+                obs, acts, next_obs, rs, dones = self.trans_buffer_ls[i].sample_transition()
+                self.policy_ls[i].backward(self.sess, obs, acts, dones, rs, cur_lr,
+                                           summary_writer=summary_writer,
+                                           global_step=global_step + k if global_step else None)
+    
+    def forward(self, obs, mode='act', stochastic=False):
+        # For COMA, we assume each agent requires both its local observation and the global state.
+        actions = []
+        qs_ls = []
+        for i in range(self.n_agent):
+            # Here, obs[i] should be a tuple: (local_obs, global_state)
+            act, qs = self.policy_ls[i].forward(self.sess, obs[i], mode, stochastic)
+            actions.append(act)
+            qs_ls.append(qs)
+        return actions, qs_ls
+    
+    def reset(self):
+        for policy in self.policy_ls:
+            policy.reset()
+    
+    def add_transition(self, obs, actions, rewards, next_obs, done):
         for i in range(self.n_agent):
             self.trans_buffer_ls[i].add_transition(obs[i], actions[i], rewards[i], next_obs[i], done)
     

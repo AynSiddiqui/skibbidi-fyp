@@ -515,8 +515,6 @@ class DeepQPolicy(QPolicy):
         if summary_writer is not None:
             summary_writer.add_summary(outs[0], global_step=global_step)
 
-
-
 class LRQPolicy(DeepQPolicy):
     def __init__(self, n_s, n_a, n_step, name=None):
         QPolicy.__init__(self, n_a, n_s, n_step, 'lr', name)
@@ -527,3 +525,103 @@ class LRQPolicy(DeepQPolicy):
 
     def _build_net(self, S):
         return self._build_fc_net(S, [])
+
+class COMAPolicy(ACPolicy):
+    def __init__(self, n_s, n_a, n_w, n_step, model_config, name=None):
+        super().__init__(n_a, n_s, n_step, 'coma', name)
+        # Use a dedicated variable scope for this agent using self.name
+        with tf.variable_scope(self.name):
+            # For actor, use the full local observation (dimension = n_s)
+            self.obs_actor = tf.placeholder(tf.float32, [None, n_s], name="obs_actor")
+            h_actor = fc(self.obs_actor, 'actor_fc', 128, act=tf.nn.relu)
+            self.pi = fc(h_actor, 'actor_out', n_a, act=tf.nn.softmax)
+
+            # For critic, use the centralized (global) state (assume global dimension = n_s)
+            self.obs_critic = tf.placeholder(tf.float32, [None, n_s], name="obs_critic")
+            h_critic = fc(self.obs_critic, 'critic_fc', 128, act=tf.nn.relu)
+            self.q = fc(h_critic, 'critic_out', n_a, act=lambda x: x)
+
+            # Placeholders for training
+            self.A = tf.placeholder(tf.int32, [None], name="A")
+            self.R = tf.placeholder(tf.float32, [None], name="R")
+            
+            # Compute baseline as expectation over actions under the policy
+            self.baseline = tf.reduce_sum(self.pi * self.q, axis=1)
+            onehot_A = tf.one_hot(self.A, n_a)
+            q_a = tf.reduce_sum(self.q * onehot_A, axis=1)
+            self.advantage = q_a - self.baseline
+            
+            # Actor loss: counterfactual policy gradient loss
+            self.actor_loss = -tf.reduce_mean(
+                tf.reduce_sum(tf.log(tf.clip_by_value(self.pi, 1e-10, 1.0)) * onehot_A, axis=1) * self.advantage)
+            # Critic loss: Mean-squared error for Q-value regression
+            self.critic_loss = tf.reduce_mean(tf.square(q_a - self.R))
+            self.loss = self.actor_loss + self.critic_loss
+
+            self.lr = tf.placeholder(tf.float32, [], name="lr")
+            self.optimizer = tf.train.RMSPropOptimizer(learning_rate=self.lr)
+            self._train = self.optimizer.minimize(self.loss)
+
+            # Create summaries for monitoring
+            summaries = []
+            summaries.append(tf.summary.scalar("loss/actor_loss_coma", self.actor_loss))
+            summaries.append(tf.summary.scalar("loss/critic_loss_coma", self.critic_loss))
+            summaries.append(tf.summary.scalar("loss/total_loss_coma", self.loss))
+            self.summary = tf.summary.merge(summaries)
+
+    def forward(self, sess, obs, mode='act', stochastic=False):
+        # [forward method as before...]
+        if isinstance(obs, (list, tuple)):
+            if len(obs) == 2:
+                local_obs, global_state = obs
+            else:
+                local_obs = obs[0]
+                global_state = obs
+        else:
+            local_obs = obs
+            global_state = obs
+        if len(local_obs.shape) == 1:
+            local_obs = np.expand_dims(local_obs, 0)
+        pi_val = sess.run(self.pi, {self.obs_actor: local_obs})
+        if mode == 'explore':
+            actions = np.array([np.random.choice(len(p), p=p) for p in pi_val])
+        else:
+            actions = np.array([np.argmax(p) for p in pi_val])
+        if len(global_state.shape) == 1:
+            global_state = np.expand_dims(global_state, 0)
+        q_val = sess.run(self.q, {self.obs_critic: global_state})
+        return actions, q_val
+
+    def backward(self, sess, obs, acts, dones, Rs, cur_lr, summary_writer=None, global_step=None):
+        if isinstance(obs, (list, tuple)):
+            if len(obs) == 2:
+                local_obs, global_state = obs
+            else:
+                local_obs = obs[0]
+                global_state = obs
+        else:
+            local_obs = obs
+            global_state = obs
+        if len(local_obs.shape) == 1:
+            local_obs = np.expand_dims(local_obs, 0)
+        if len(global_state.shape) == 1:
+            global_state = np.expand_dims(global_state, 0)
+        acts = np.array(acts)
+        acts = np.squeeze(acts)
+        feed_dict = {self.obs_actor: local_obs,
+                     self.obs_critic: global_state,
+                     self.A: acts,
+                     self.R: Rs,
+                     self.lr: cur_lr}
+        if summary_writer is None:
+            sess.run(self._train, feed_dict=feed_dict)
+        else:
+            outs = sess.run([self.summary, self._train], feed_dict=feed_dict)
+            summary_writer.add_summary(outs[0], global_step=global_step)
+
+    def prepare_loss(self, max_grad_norm, gamma, alpha=None, epsilon=None):
+        # COMA loss is built in __init__, so we do nothing here.
+        pass
+
+    def reset(self):
+        pass

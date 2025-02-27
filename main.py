@@ -16,7 +16,7 @@ from envs.large_grid_env import LargeGridEnv, LargeGridController
 from envs.real_net_env import RealNetEnv, RealNetController
 from envs.test_grid_env import TestGridEnv, TestGridController
 from envs.worli_env import WorliEnv, WorliController
-from agents.models import A2C, IA2C, MA2C, IQL , DQN
+from agents.models import A2C, IA2C, MA2C, IQL , DQN , COMA
 from utils import (Counter, Trainer, Tester, Evaluator, RREvaluator,
                    check_dir, copy_file, find_file,
                    init_dir, init_log, init_test_flag,
@@ -26,7 +26,7 @@ from utils import (Counter, Trainer, Tester, Evaluator, RREvaluator,
 def parse_args():
     default_base_dir = os.path.join(os.getcwd(), 'worli')
     default_config_dir = os.path.join(
-        os.getcwd(), 'config', 'config_dqn_worli.ini')
+        os.getcwd(), 'config', 'config_coma_worli.ini')
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--base-dir', type=str, required=False,
@@ -150,6 +150,9 @@ def train(args):
     elif env.agent == 'dqn':
         model = DQN(env.n_s_ls, env.n_a_ls, env.n_w_ls, total_step, config['MODEL_CONFIG'],
                     seed=0)
+    elif env.agent == 'coma':  
+        model = COMA(env.n_s_ls, env.n_a_ls, env.n_w_ls, total_step, config['MODEL_CONFIG'],
+                     seed=seed)
     else:
         model = IQL(env.n_s_ls, env.n_a_ls, env.n_w_ls, total_step, config['MODEL_CONFIG'],
                     seed=0, model_type='lr')
@@ -231,6 +234,8 @@ def evaluate_fn(agent, agent_dir, output_dir, seeds, port, demo, policy_type):
                         seed=0, model_type='dqn')
         elif agent == 'dqn':
             model = DQN(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'], seed=0)
+        elif agent == 'coma': 
+            model = COMA(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'], seed=0)
         else:
             model = IQL(env.n_s_ls, env.n_a_ls, env.n_w_ls, 0, config['MODEL_CONFIG'],
                         seed=0, model_type='lr')
