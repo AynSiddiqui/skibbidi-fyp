@@ -1269,7 +1269,6 @@
    <route edges="61652876 1239434255#3-AddedOnRampEdge 1239434255#3 1239434255#4 1239434255#5 1239434255#6" id="route_19_61652876" />
    <vehicle depart="1054" id="route_19_61652876_veh1054" route="route_19_61652876" type="car" />
    <route edges="61652876 1239434255#3-AddedOnRampEdge 1239434255#3 1239434255#4 1239434255#5 1239434255#6" id="route_20_61652876" />
-<<<<<<< HEAD
    <vehicle depart="1055" id="route_20_61652876_veh1055" route="route_20_61652876" type="car" />
    <route edges="61652876 1239434255#3-AddedOnRampEdge 1239434255#3 1239434255#4 1239434255#5 1239434255#6" id="route_21_61652876" />
    <vehicle depart="1056" id="route_21_61652876_veh1056" route="route_21_61652876" type="car" />
@@ -2909,7 +2908,6 @@
    <vehicle depart="1873" id="route_1_22850376#3_veh1873" route="route_1_22850376#3" type="car" />
    <route edges="22850376#3 -22850376#3 1234788292#2 1236044645 1239434258#2 1239434258#3 1285590647#0 1285590647#1 1234788292#0" id="route_2_22850376#3" />
    <vehicle depart="1874" id="route_2_22850376#3_veh1874" route="route_2_22850376#3" type="car" />
-=======
    <vehicle depart="634" id="route_20_61652876_veh634" route="route_20_61652876" type="car" />
    <route edges="-1237761221 1237761221 1062054751 -1237761220 -1133675674#6 1123855693 220308833#6 -220308833#6 -1123855693 1133675674#6 1237761220" id="route_0_-1237761221" />
    <vehicle depart="635" id="route_0_-1237761221_veh635" route="route_0_-1237761221" type="car" />
@@ -3963,5 +3961,4 @@
    <vehicle depart="1159" id="route_1_22850376#3_veh1159" route="route_1_22850376#3" type="car" />
    <route edges="22850376#3 -22850376#3 -22850376#1 22850376#1 1285590647#1 1236044643#1 658655412#0 658655412#1 658655411#7 658655411#8 658655411#9" id="route_2_22850376#3" />
    <vehicle depart="1160" id="route_2_22850376#3_veh1160" route="route_2_22850376#3" type="car" />
->>>>>>> 7a84ef36fae0ffaabfbb1e15b6a99bfeda4bf612
 </routes>
